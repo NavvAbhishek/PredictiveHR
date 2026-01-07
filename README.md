@@ -66,7 +66,7 @@ PredictiveHR is an intelligent HR Churn Prediction System that helps organizatio
    - Note down your database credentials
 
 3. **Configure environment variables**
-   Create a `.env` file in the root directory:
+   Create a `.env` file in the backend folder root directory:
    ```env
    DB_USER=your_database_user
    DB_PASSWORD=your_database_password
@@ -118,11 +118,11 @@ The API will be available at `http://localhost:8000`
 
 The system uses a Logistic Regression model trained on employee data to predict churn probability. The model considers various factors such as:
 
-- Job satisfaction metrics
-- Work-life balance indicators
-- Career progression data
-- Compensation analysis
-- Geographic and remote work factors
+- Age
+- Company Size
+- Remote Work
+- Monthly Income ($)
+- Distance from Home (km)
 
 ## 🔧 Usage
 
