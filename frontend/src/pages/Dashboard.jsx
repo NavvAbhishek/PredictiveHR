@@ -41,20 +41,46 @@ const Dashboard = () => {
 
   const predictionRef = useRef(null);
 
+  // Load history from localStorage on component mount
   useEffect(() => {
-    // load history from localStorage
-    try {
-      const raw = localStorage.getItem(HISTORY_KEY);
-      if (raw) setHistory(JSON.parse(raw));
-    } catch (err) {
-      console.error("error", err);
-    }
-  }, []);
+    const loadHistory = () => {
+      try {
+        console.log("Loading history from localStorage");
+        const storedHistory = localStorage.getItem(HISTORY_KEY);
+        console.log("Stored history:", storedHistory);
+        
+        if (storedHistory) {
+          const parsed = JSON.parse(storedHistory);
+          // Ensure it's an array and has valid data
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setHistory(parsed);
+            console.log("History loaded successfully:", parsed);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading history from localStorage:", error);
+        // Clear corrupted data
+        localStorage.removeItem(HISTORY_KEY);
+      }
+    };
 
+    loadHistory();
+  }, []); // Empty dependency array - only run on mount
+
+  // Save history to localStorage whenever history changes
   useEffect(() => {
-    // persist history
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 10)));
-  }, [history]);
+    // Only save if history has data to avoid overwriting on initial load
+    if (history.length > 0) {
+      try {
+        // Keep only the latest 10 entries
+        const historyToSave = history.slice(0, 10);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(historyToSave));
+        console.log("History saved to localStorage:", historyToSave);
+      } catch (error) {
+        console.error("Error saving history to localStorage:", error);
+      }
+    }
+  }, [history]); // Run whenever history changes
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -147,14 +173,25 @@ const Dashboard = () => {
         setPrediction(data.prediction);
         setProbability(data.probability ?? null);
 
-        // push to history
+        // Create new history entry
         const entry = {
           ts: new Date().toISOString(),
           input: payload,
           prediction: data.prediction,
           probability: data.probability,
         };
-        setHistory((h) => [entry, ...h].slice(0, 10));
+
+        // Update history state
+        const newHistory = [entry, ...history].slice(0, 10);
+        setHistory(newHistory);
+
+        // Immediately save to localStorage as backup
+        try {
+          localStorage.setItem(HISTORY_KEY, JSON.stringify(newHistory));
+          console.log("History immediately saved:", newHistory);
+        } catch (saveError) {
+          console.error("Error immediately saving to localStorage:", saveError);
+        }
 
         setError(null);
         setTimeout(
@@ -163,7 +200,8 @@ const Dashboard = () => {
         );
       }
     } catch (err) {
-      setError("Network error — check the backend and CORS settings.", err);
+      console.error("Network error:", err);
+      setError("Network error — check the backend and CORS settings.");
       setPrediction(null);
       setProbability(null);
     } finally {
@@ -265,7 +303,12 @@ const Dashboard = () => {
 
   const clearHistory = () => {
     setHistory([]);
-    localStorage.removeItem(HISTORY_KEY);
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+      console.log("History cleared from localStorage");
+    } catch (error) {
+      console.error("Error clearing localStorage:", error);
+    }
   };
 
   return (
@@ -276,6 +319,7 @@ const Dashboard = () => {
           Employee Attrition Prediction
         </h1>
 
+        {/* Form */}
         <form
           onSubmit={handleSubmit}
           className="grid grid-cols-1 md:grid-cols-2 gap-6"
@@ -342,6 +386,7 @@ const Dashboard = () => {
           </div>
         </form>
 
+        {/* Prediction Result */}
         <div ref={predictionRef}>
           {prediction !== null && (
             <div
@@ -374,7 +419,7 @@ const Dashboard = () => {
                     style={{
                       width: `${
                         probability !== null
-                          ? ((probability) * 100).toFixed(2)
+                          ? probability * 100
                           : 0
                       }%`,
                       transition: "width 400ms ease",
@@ -383,7 +428,7 @@ const Dashboard = () => {
                 </div>
                 <div className="mt-2 text-sm text-gray-700">
                   {probability !== null
-                    ? `${((probability) * 100).toFixed(2)}%`
+                    ? `${(probability * 100).toFixed(2)}%`
                     : "N/A"}
                 </div>
               </div>
@@ -401,47 +446,101 @@ const Dashboard = () => {
           )}
         </div>
 
-        {/* Simple history */}
+        {/* Recent Predictions - Table */}
         {history.length > 0 && (
           <div className="mt-8">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-semibold">Recent Predictions</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-800">
+                Recent Predictions ({history.length})
+              </h3>
               <button
                 onClick={clearHistory}
-                className="text-sm text-red-600 hover:underline"
+                className="text-sm text-red-600 hover:underline hover:text-red-800 transition-colors"
               >
-                Clear
+                Clear History
               </button>
             </div>
 
-            <div className="grid gap-3">
-              {history.map((h) => (
-                <div key={h.ts} className="p-3 bg-white rounded border">
-                  <div className="text-xs text-gray-500">
-                    {new Date(h.ts).toLocaleString()}
-                  </div>
-                  <div className="text-sm mt-1">
-                    Prediction:{" "}
-                    <strong
-                      className={
-                        h.prediction === 0 ? "text-red-600" : "text-green-600"
-                      }
-                    >
-                      {h.prediction === 0 ? "Attrition" : "No Attrition"}
-                    </strong>{" "}
-                    —{" "}
-                    {h.probability !== null
-                      ? `${((h.probability) * 100).toFixed(2)}%`
-                      : "N/A"}
-                  </div>
-                  <details className="mt-2 text-xs text-gray-600">
-                    <summary className="cursor-pointer">View input</summary>
-                    <pre className="mt-2 text-xs bg-gray-100 p-2 rounded">
-                      {JSON.stringify(h.input, null, 2)}
-                    </pre>
-                  </details>
-                </div>
-              ))}
+            <div className="overflow-x-auto border rounded-lg shadow">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead className="bg-gray-100 text-gray-700 text-xs uppercase">
+                  <tr>
+                    <th className="px-4 py-2">Timestamp</th>
+                    <th className="px-4 py-2">Prediction</th>
+                    <th className="px-4 py-2">Confidence</th>
+                    <th className="px-4 py-2">Input</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h, index) => (
+                    <tr key={`${h.ts}-${index}`} className="border-b hover:bg-gray-50">
+                      {/* Timestamp */}
+                      <td className="px-4 py-2 text-xs text-gray-500">
+                        {new Date(h.ts).toLocaleString()}
+                      </td>
+
+                      {/* Prediction Badge */}
+                      <td className="px-4 py-2">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            h.prediction === 0
+                              ? "bg-red-100 text-red-700"
+                              : "bg-green-100 text-green-700"
+                          }`}
+                        >
+                          {h.prediction === 0 ? "Attrition" : "No Attrition"}
+                        </span>
+                      </td>
+
+                      {/* Confidence with bar */}
+                      <td className="px-4 py-2">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              h.prediction === 0 ? "bg-red-500" : "bg-green-500"
+                            }`}
+                            style={{
+                              width: `${
+                                h.probability !== null
+                                  ? (h.probability * 100).toFixed(2)
+                                  : 0
+                              }%`,
+                            }}
+                          />
+                        </div>
+                        <span className="text-xs text-gray-600">
+                          {h.probability !== null
+                            ? `${(h.probability * 100).toFixed(2)}%`
+                            : "N/A"}
+                        </span>
+                      </td>
+
+                      {/* Expandable input table */}
+                      <td className="px-4 py-2">
+                        <details>
+                          <summary className="cursor-pointer text-xs text-blue-600 hover:underline">
+                            View Details
+                          </summary>
+                          <div className="mt-2 max-h-40 overflow-y-auto border rounded">
+                            <table className="w-full text-xs border-collapse">
+                              <tbody>
+                                {Object.entries(h.input || {}).map(([key, value]) => (
+                                  <tr key={key} className="border-b">
+                                    <td className="px-2 py-1 font-medium text-gray-700 bg-gray-50 w-1/2">
+                                      {key}
+                                    </td>
+                                    <td className="px-2 py-1">{String(value)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
